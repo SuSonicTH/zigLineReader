@@ -1,4 +1,5 @@
 const std = @import("std");
+const memMapper = @import("MemMapper");
 
 const LineReaderError = error{
     OptionError,
