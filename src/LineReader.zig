@@ -1,5 +1,5 @@
 const std = @import("std");
-const memMapper = @import("MemMapper");
+const MemMapper = @import("MemMapper").MemMapper;
 
 const LineReaderError = error{
     OptionError,
