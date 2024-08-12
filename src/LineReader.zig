@@ -38,12 +38,12 @@ pub const LineReader = struct {
             .buffer = try allocator.alloc(u8, alloc_size),
             .includeEol = options.includeEol,
         };
-        errdefer free(&line_reader);
+        errdefer deinit(&line_reader);
         _ = try line_reader.fillBuffer();
         return line_reader;
     }
 
-    pub fn free(self: *LineReader) void {
+    pub fn deinit(self: *LineReader) void {
         self.allocator.free(self.buffer);
     }
 
@@ -88,8 +88,8 @@ pub const LineReader = struct {
         }
         self.next = self.start + pos + eol_characters;
         if (self.includeEol) {
-                return self.buffer[self.start .. self.start + pos + eol_characters];
-        }else {
+            return self.buffer[self.start .. self.start + pos + eol_characters];
+        } else {
             return self.buffer[self.start .. self.start + pos];
         }
     }
@@ -121,13 +121,65 @@ pub const LineReader = struct {
     }
 };
 
+pub const MemMappedLineReader = struct {
+    memMapper: MemMapper,
+    includeEol: bool,
+    data: []u8 = undefined,
+    next: usize = 0,
+
+    pub fn init(file: std.fs.File, options: Options) !MemMappedLineReader {
+        var lineReader: MemMappedLineReader = .{
+            .memMapper = try MemMapper.init(file, false),
+            .includeEol = options.includeEol,
+        };
+        errdefer lineReader.deinit();
+        lineReader.data = try lineReader.memMapper.map(u8, .{});
+        return lineReader;
+    }
+
+    pub fn deinit(self: *MemMappedLineReader) void {
+        self.memMapper.unmap(self.data);
+        self.memMapper.deinit();
+    }
+
+    pub fn readLine(self: *MemMappedLineReader) !?[]const u8 {
+        const data = self.data[self.next..];
+        var pos: usize = 0;
+        var eol_characters: usize = 0;
+
+        if (pos >= data.len) {
+            return null;
+        }
+
+        while (pos < data.len and data[pos] != '\r' and data[pos] != '\n') {
+            pos += 1;
+        }
+        if (pos < data.len) {
+            if (data[pos] == '\r') {
+                eol_characters = 1;
+                if (pos+1 < data.len and data[pos+1] == '\n') {
+                    eol_characters = 2;
+                }
+            } else if (data[pos] == '\n') {
+                eol_characters = 1;
+            }
+        }
+        self.next += pos + eol_characters;
+        if (self.includeEol) {
+            return data[0 .. pos + eol_characters];
+        } else {
+            return data[0..pos];
+        }
+    }
+};
+
 test "init" {
     try test_init();
     const file = try open_file("test/test_lf.txt");
     defer file.close();
 
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 43 });
-    defer line_reader.free();
+    defer line_reader.deinit();
 
     try testing.expectEqual(0, line_reader.start);
     try testing.expectEqual(43, line_reader.end);
@@ -137,73 +189,73 @@ test "init" {
     try testing.expectEqualStrings(test_lf_txt, line_reader.buffer[line_reader.start..line_reader.end]);
 }
 
-fn expectLinesMatching(line_reader: *LineReader) !void {
+fn expectLinesMatching(line_reader: anytype) !void {
     try testing.expectEqualStrings("The 1st line", (try line_reader.readLine()).?);
     try testing.expectEqualStrings("The middle line", (try line_reader.readLine()).?);
     try testing.expectEqualStrings("The last line", (try line_reader.readLine()).?);
     try testing.expectEqual(null, try line_reader.readLine());
 }
 
-test "read lines all in buffer" {
+test "LineReader: read lines all in buffer" {
     try test_init();
     const file = try open_file("test/test_lf.txt");
     defer file.close();
 
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
+    defer line_reader.deinit();
     try expectLinesMatching(&line_reader);
 }
 
-test "read lines partial lines in buffer" {
+test "LineReader: read lines partial lines in buffer" {
     try test_init();
     const file = try open_file("test/test_lf.txt");
     defer file.close();
 
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 1 });
-    defer line_reader.free();
+    defer line_reader.deinit();
 
     try expectLinesMatching(&line_reader);
     try testing.expectEqual(null, try line_reader.readLine());
     try testing.expectEqual(16, line_reader.size);
 }
 
-test "read lines no last eol" {
+test "LineReader: read lines no last eol" {
     try test_init();
     const file = try open_file("test/test_lf_no_last.txt");
     defer file.close();
 
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
+    defer line_reader.deinit();
     try expectLinesMatching(&line_reader);
 }
 
-test "read lines with cr as eol" {
+test "LineReader: read lines with cr as eol" {
     try test_init();
     const file = try open_file("test/test_cr.txt");
     defer file.close();
 
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
+    defer line_reader.deinit();
     try expectLinesMatching(&line_reader);
 }
 
-test "read lines with crlf as eol" {
+test "LineReader: read lines with crlf as eol" {
     try test_init();
     const file = try open_file("test/test_cr_lf.txt");
     defer file.close();
 
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
-    defer line_reader.free();
+    defer line_reader.deinit();
     try expectLinesMatching(&line_reader);
 }
 
-test "read lines with includeEol crlf at end" {
+test "LineReader: read lines with includeEol crlf at end" {
     try test_init();
     const file = try open_file("test/test_cr_lf.txt");
     defer file.close();
 
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30, .includeEol = true});
-    defer line_reader.free();
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30, .includeEol = true });
+    defer line_reader.deinit();
 
     try testing.expectEqualStrings("The 1st line\r\n", (try line_reader.readLine()).?);
     try testing.expectEqualStrings("The middle line\r\n", (try line_reader.readLine()).?);
@@ -211,13 +263,71 @@ test "read lines with includeEol crlf at end" {
     try testing.expectEqual(null, try line_reader.readLine());
 }
 
-test "read lines with includeEol has lf at end" {
+test "LineReader: read lines with includeEol has lf at end" {
     try test_init();
     const file = try open_file("test/test_lf_no_last.txt");
     defer file.close();
 
-    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 , .includeEol = true});
-    defer line_reader.free();
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30, .includeEol = true });
+    defer line_reader.deinit();
+
+    try testing.expectEqualStrings("The 1st line\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("The middle line\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("The last line", (try line_reader.readLine()).?);
+    try testing.expectEqual(null, try line_reader.readLine());
+}
+
+test "MemMappedLineReader: read lines no last eol" {
+    try test_init();
+    const file = try open_file("test/test_lf_no_last.txt");
+    defer file.close();
+
+    var line_reader = try MemMappedLineReader.init(file, .{});
+    defer line_reader.deinit();
+    try expectLinesMatching(&line_reader);
+}
+
+test "MemMappedLineReader: read lines with cr as eol" {
+    try test_init();
+    const file = try open_file("test/test_cr.txt");
+    defer file.close();
+
+    var line_reader = try MemMappedLineReader.init(file, .{});
+    defer line_reader.deinit();
+    try expectLinesMatching(&line_reader);
+}
+
+test "MemMappedLineReader: read lines with crlf as eol" {
+    try test_init();
+    const file = try open_file("test/test_cr_lf.txt");
+    defer file.close();
+
+    var line_reader = try MemMappedLineReader.init(file, .{});
+    defer line_reader.deinit();
+    try expectLinesMatching(&line_reader);
+}
+
+test "MemMappedLineReader: read lines with includeEol crlf at end" {
+    try test_init();
+    const file = try open_file("test/test_cr_lf.txt");
+    defer file.close();
+
+    var line_reader = try MemMappedLineReader.init(file, .{ .includeEol = true });
+    defer line_reader.deinit();
+
+    try testing.expectEqualStrings("The 1st line\r\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("The middle line\r\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("The last line\r\n", (try line_reader.readLine()).?);
+    try testing.expectEqual(null, try line_reader.readLine());
+}
+
+test "MemMappedLineReader: read lines with includeEol has lf at end" {
+    try test_init();
+    const file = try open_file("test/test_lf_no_last.txt");
+    defer file.close();
+
+    var line_reader = try MemMappedLineReader.init(file, .{ .includeEol = true });
+    defer line_reader.deinit();
 
     try testing.expectEqualStrings("The 1st line\n", (try line_reader.readLine()).?);
     try testing.expectEqualStrings("The middle line\n", (try line_reader.readLine()).?);
