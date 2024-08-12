@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .MemMapper = .{
-            .url = "https://github.com/SuSonicTH/zigMemMapper/archive/e16ea893953d8c29f7173f1a380d07b9dc6b8de1.tar.gz",
-            .hash = "1220e287e82641dfc0d97ea2e24a2b8d52c9f8479322498ae4d55f72a3dbd5466c96",
+            .url = "https://github.com/SuSonicTH/zigMemMapper/archive/9810b04516fd59bfdedd89ae2ad4374015fbd158.tar.gz",
+            .hash = "1220dc6999d2edd1cd38a75bf6e4cfad758dd82d4c89f72e258fff4799309af30227",
         },
     },
 

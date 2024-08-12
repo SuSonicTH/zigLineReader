@@ -6,7 +6,7 @@ const LineReaderError = error{
 };
 pub const Options = struct {
     size: usize = 4096,
-    includeEof: bool = false,
+    includeEol: bool = false,
 };
 
 pub const LineReader = struct {
@@ -19,7 +19,7 @@ pub const LineReader = struct {
     next: usize = 0,
     end: usize = 0,
     eof: bool = false,
-    includeEof: bool,
+    includeEol: bool,
 
     pub fn init(reader: std.fs.File.Reader, allocator: std.mem.Allocator, options: Options) !LineReader {
         if (options.size == 0) {
@@ -36,10 +36,10 @@ pub const LineReader = struct {
             .size = alloc_size,
             .read_size = read_size,
             .buffer = try allocator.alloc(u8, alloc_size),
-            .includeEof = options.includeEof,
+            .includeEol = options.includeEol,
         };
         errdefer free(&line_reader);
-        _ = try line_reader.fill_buffer();
+        _ = try line_reader.fillBuffer();
         return line_reader;
     }
 
@@ -47,9 +47,9 @@ pub const LineReader = struct {
         self.allocator.free(self.buffer);
     }
 
-    pub fn read_line(self: *LineReader) !?[]const u8 {
+    pub fn readLine(self: *LineReader) !?[]const u8 {
         var pos: usize = 0;
-        var skip: usize = 1;
+        var eol_characters: usize = 0;
         self.start = self.next;
 
         if (self.start > self.end) {
@@ -59,7 +59,7 @@ pub const LineReader = struct {
         var window = self.buffer[self.start..self.end];
         while (true) {
             if (pos == window.len) {
-                if (try self.fill_buffer() == 0) {
+                if (try self.fillBuffer() == 0) {
                     if (pos == 0) {
                         return null;
                     }
@@ -69,26 +69,32 @@ pub const LineReader = struct {
             }
             const current = window[pos];
             if (current == '\r') {
+                eol_characters = 1;
                 if (pos == window.len - 1) {
-                    if (try self.fill_buffer() == 0) {
+                    if (try self.fillBuffer() == 0) {
                         break;
                     }
                     window = self.buffer[self.start..self.end];
                 }
                 if (window[pos + 1] == '\n') {
-                    skip = 2;
+                    eol_characters = 2;
                 }
                 break;
             } else if (current == '\n') {
+                eol_characters = 1;
                 break;
             }
             pos += 1;
         }
-        self.next = self.start + pos + skip;
-        return self.buffer[self.start .. self.start + pos]; //todo: include EOL in the returned string
+        self.next = self.start + pos + eol_characters;
+        if (self.includeEol) {
+                return self.buffer[self.start .. self.start + pos + eol_characters];
+        }else {
+            return self.buffer[self.start .. self.start + pos];
+        }
     }
 
-    fn fill_buffer(self: *LineReader) !usize {
+    fn fillBuffer(self: *LineReader) !usize {
         if (self.eof) {
             return 0;
         }
@@ -132,10 +138,10 @@ test "init" {
 }
 
 fn expectLinesMatching(line_reader: *LineReader) !void {
-    try testing.expectEqualStrings("ONE,TWO,THREE", (try line_reader.read_line()).?);
-    try testing.expectEqualStrings("1,2,3", (try line_reader.read_line()).?);
-    try testing.expectEqualStrings("4,5,6", (try line_reader.read_line()).?);
-    try testing.expectEqual(null, try line_reader.read_line());
+    try testing.expectEqualStrings("ONE,TWO,THREE", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("1,2,3", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("4,5,6", (try line_reader.readLine()).?);
+    try testing.expectEqual(null, try line_reader.readLine());
 }
 
 test "read lines all in buffer" {
@@ -157,7 +163,7 @@ test "read lines partial lines in buffer" {
     defer line_reader.free();
 
     try expectLinesMatching(&line_reader);
-    try testing.expectEqual(null, try line_reader.read_line());
+    try testing.expectEqual(null, try line_reader.readLine());
     try testing.expectEqual(14, line_reader.size);
 }
 
@@ -189,6 +195,34 @@ test "read lines with crlf as eol" {
     var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 });
     defer line_reader.free();
     try expectLinesMatching(&line_reader);
+}
+
+test "read lines with includeEol crlf at end" {
+    try test_init();
+    const file = try open_file("test/test_cr_lf.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30, .includeEol = true});
+    defer line_reader.free();
+
+    try testing.expectEqualStrings("ONE,TWO,THREE\r\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("1,2,3\r\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("4,5,6\r\n", (try line_reader.readLine()).?);
+    try testing.expectEqual(null, try line_reader.readLine());
+}
+
+test "read lines with includeEol has lf at end" {
+    try test_init();
+    const file = try open_file("test/test_lf_no_last.csv");
+    defer file.close();
+
+    var line_reader = try LineReader.init(file.reader(), hpa, .{ .size = 30 , .includeEol = true});
+    defer line_reader.free();
+
+    try testing.expectEqualStrings("ONE,TWO,THREE\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("1,2,3\n", (try line_reader.readLine()).?);
+    try testing.expectEqualStrings("4,5,6", (try line_reader.readLine()).?);
+    try testing.expectEqual(null, try line_reader.readLine());
 }
 
 const hpa = std.heap.page_allocator;
