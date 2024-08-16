@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const lineReader = b.addModule("zigStringUtil", .{
+    const lineReader = b.addModule("LineReader", .{
         .root_source_file = b.path("src/LineReader.zig"),
         .target = target,
         .optimize = optimize,
