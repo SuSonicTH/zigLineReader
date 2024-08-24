@@ -84,7 +84,7 @@ fn bench(function: Bench, name: []const u8, allocator: std.mem.Allocator) !void 
 }
 
 test "readUntilDelimiterOrEof" {
-    try bench(readUntilDelimiterOrEof, "readUntilDelimiterOrEof", hpa);
+    //try bench(readUntilDelimiterOrEof, "readUntilDelimiterOrEof", hpa);
 }
 
 test "readUntilDelimiterOrEofBuffered" {

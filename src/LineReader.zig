@@ -94,7 +94,7 @@ pub const LineReader = struct {
         }
     }
 
-    fn fillBuffer(self: *LineReader) !usize {
+    inline fn fillBuffer(self: *LineReader) !usize {
         if (self.eof) {
             return 0;
         }
@@ -157,7 +157,7 @@ pub const MemMappedLineReader = struct {
         if (pos < data.len) {
             if (data[pos] == '\r') {
                 eol_characters = 1;
-                if (pos+1 < data.len and data[pos+1] == '\n') {
+                if (pos + 1 < data.len and data[pos + 1] == '\n') {
                     eol_characters = 2;
                 }
             } else if (data[pos] == '\n') {
