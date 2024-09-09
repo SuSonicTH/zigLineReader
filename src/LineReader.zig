@@ -171,6 +171,21 @@ pub const MemMappedLineReader = struct {
             return data[0..pos];
         }
     }
+
+    pub fn readAllLines(self: *MemMappedLineReader, allocator: std.mem.Allocator) ![][]const u8 {
+        var reserved: usize = 1024;
+        var lines: [][]const u8 = try allocator.alloc([]u8, reserved);
+        var i: usize = 0;
+        while ((try self.readLine())) |line| {
+            if (i == reserved) {
+                reserved *= 2;
+                lines = try allocator.realloc(lines, reserved);
+            }
+            lines[i] = line;
+            i += 1;
+        }
+        return lines[0..i];
+    }
 };
 
 test "init" {
@@ -333,6 +348,21 @@ test "MemMappedLineReader: read lines with includeEol has lf at end" {
     try testing.expectEqualStrings("The middle line\n", (try line_reader.readLine()).?);
     try testing.expectEqualStrings("The last line", (try line_reader.readLine()).?);
     try testing.expectEqual(null, try line_reader.readLine());
+}
+
+test "MemMappedLineReader: read all lines" {
+    try test_init();
+    const file = try open_file("test/test_lf.txt");
+    defer file.close();
+
+    var line_reader = try MemMappedLineReader.init(file, .{ .includeEol = true });
+    defer line_reader.deinit();
+
+    const lines = try line_reader.readAllLines(hpa);
+    try testing.expectEqualStrings("The 1st line\n", lines[0]);
+    try testing.expectEqualStrings("The middle line\n", lines[1]);
+    try testing.expectEqualStrings("The last line\n", lines[2]);
+    try testing.expectEqual(3, lines.len);
 }
 
 const hpa = std.heap.page_allocator;
