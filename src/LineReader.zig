@@ -148,7 +148,7 @@ pub const MemMappedLineReader = struct {
         return lineReader;
     }
 
-    pub fn reset(self: *MemMappedLineReader) void {
+    pub fn reset(self: *MemMappedLineReader) !void {
         self.next = 0;
     }
 
