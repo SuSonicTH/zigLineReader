@@ -43,6 +43,17 @@ pub const LineReader = struct {
         return line_reader;
     }
 
+    pub fn reset(self: *LineReader) !void {
+        _ = self;
+        return error.Unsupported;
+    }
+
+    pub fn readAllLines(self: *LineReader, allocator: std.mem.Allocator) ![][]const u8 {
+        _ = self;
+        _ = allocator;
+        return error.Unsupported;
+    }
+
     pub fn deinit(self: *LineReader) void {
         self.allocator.free(self.buffer);
     }
@@ -135,6 +146,10 @@ pub const MemMappedLineReader = struct {
         errdefer lineReader.deinit();
         lineReader.data = try lineReader.memMapper.map(u8, .{});
         return lineReader;
+    }
+
+    pub fn reset(self: *MemMappedLineReader) void {
+        self.next = 0;
     }
 
     pub fn deinit(self: *MemMappedLineReader) void {
