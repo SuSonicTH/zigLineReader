@@ -1,6 +1,6 @@
 const std = @import("std");
-const LineReaderAnyReader = @import("LineReader.zig").LineReaderAnyReader;
-const LineReaderMemoryMapped = @import("LineReader.zig").LineReaderMemoryMapped;
+const LineReaderAnyReader = @import("LineReaderAnyReader.zig");
+const LineReaderMemoryMapped = @import("LineReaderMemoryMapped.zig");
 const LineReader = @import("LineReader.zig").LineReader;
 
 fn readUntilDelimiterOrEof(allocator: std.mem.Allocator) !void {

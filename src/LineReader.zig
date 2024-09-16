@@ -1,7 +1,8 @@
 const std = @import("std");
-const MemMapper = @import("MemMapper").MemMapper;
+const LineReaderAnyReader = @import("LineReaderAnyReader.zig");
+const LineReaderMemoryMapped = @import("LineReaderMemoryMapped.zig");
 
-const LineReaderError = error{
+pub const LineReaderError = error{
     OptionError,
 };
 pub const Options = struct {
@@ -31,187 +32,6 @@ pub const LineReader = union(enum) {
         switch (self.*) {
             inline else => |*lineReader| return try lineReader.readLine(),
         }
-    }
-};
-
-pub const LineReaderAnyReader = struct {
-    reader: std.io.AnyReader,
-    allocator: std.mem.Allocator,
-    size: usize,
-    read_size: usize,
-    buffer: []u8,
-    start: usize = 0,
-    next: usize = 0,
-    end: usize = 0,
-    eof: bool = false,
-    includeEol: bool,
-
-    pub fn init(reader: std.io.AnyReader, allocator: std.mem.Allocator, options: Options) !LineReaderAnyReader {
-        if (options.size == 0) {
-            return LineReaderError.OptionError;
-        }
-        var read_size: usize = options.size;
-        if (read_size == 0) {
-            read_size = 4096;
-        }
-        const alloc_size = read_size * 2;
-        var lineReader: LineReaderAnyReader = .{
-            .reader = reader,
-            .allocator = allocator,
-            .size = alloc_size,
-            .read_size = read_size,
-            .buffer = try allocator.alloc(u8, alloc_size),
-            .includeEol = options.includeEol,
-        };
-        errdefer deinit(&lineReader);
-        _ = try lineReader.fillBuffer();
-        return lineReader;
-    }
-
-    pub fn deinit(self: *LineReaderAnyReader) void {
-        self.allocator.free(self.buffer);
-    }
-
-    pub fn readLine(self: *LineReaderAnyReader) !?[]const u8 {
-        var pos: usize = 0;
-        var eol_characters: usize = 0;
-        self.start = self.next;
-
-        if (self.start > self.end) {
-            return null;
-        }
-
-        var window = self.buffer[self.start..self.end];
-        while (true) {
-            if (pos == window.len) {
-                if (try self.fillBuffer() == 0) {
-                    if (pos == 0) {
-                        return null;
-                    }
-                    break;
-                }
-                window = self.buffer[self.start..self.end];
-            }
-            const current = window[pos];
-            if (current == '\r') {
-                eol_characters = 1;
-                if (pos == window.len - 1) {
-                    if (try self.fillBuffer() == 0) {
-                        break;
-                    }
-                    window = self.buffer[self.start..self.end];
-                }
-                if (window[pos + 1] == '\n') {
-                    eol_characters = 2;
-                }
-                break;
-            } else if (current == '\n') {
-                eol_characters = 1;
-                break;
-            }
-            pos += 1;
-        }
-        self.next = self.start + pos + eol_characters;
-        if (self.includeEol) {
-            return self.buffer[self.start .. self.start + pos + eol_characters];
-        } else {
-            return self.buffer[self.start .. self.start + pos];
-        }
-    }
-
-    inline fn fillBuffer(self: *LineReaderAnyReader) !usize {
-        if (self.eof) {
-            return 0;
-        }
-
-        var space: usize = self.size - self.end;
-        if (space < self.read_size) {
-            if (self.start > 0) {
-                std.mem.copyBackwards(u8, self.buffer, self.buffer[self.start..self.end]);
-                self.end = self.end - self.start;
-                self.start = 0;
-                space = self.size - self.end;
-            }
-            if (space < self.read_size) {
-                self.size += self.read_size;
-                self.buffer = try self.allocator.realloc(self.buffer, self.size);
-            }
-        }
-        const read = try self.reader.read(self.buffer[self.end .. self.end + self.read_size]);
-        if (read < self.read_size) {
-            self.eof = true;
-        }
-        self.end += read;
-        return read;
-    }
-};
-
-pub const LineReaderMemoryMapped = struct {
-    allocator: std.mem.Allocator,
-    memMapper: MemMapper,
-    includeEol: bool,
-    data: []u8 = undefined,
-    next: usize = 0,
-
-    pub fn init(file: *std.fs.File, allocator: std.mem.Allocator, options: Options) !LineReaderMemoryMapped {
-        var lineReader: LineReaderMemoryMapped = .{
-            .allocator = allocator,
-            .memMapper = try MemMapper.init(file.*, false),
-            .includeEol = options.includeEol,
-        };
-        errdefer lineReader.deinit();
-        lineReader.data = try lineReader.memMapper.map(u8, .{});
-        return lineReader;
-    }
-
-    pub fn deinit(self: *LineReaderMemoryMapped) void {
-        self.memMapper.unmap(self.data);
-        self.memMapper.deinit();
-    }
-
-    pub fn readLine(self: *LineReaderMemoryMapped) !?[]const u8 {
-        const data = self.data[self.next..];
-        var pos: usize = 0;
-        var eol_characters: usize = 0;
-
-        if (pos >= data.len) {
-            return null;
-        }
-
-        while (pos < data.len and data[pos] != '\r' and data[pos] != '\n') {
-            pos += 1;
-        }
-        if (pos < data.len) {
-            if (data[pos] == '\r') {
-                eol_characters = 1;
-                if (pos + 1 < data.len and data[pos + 1] == '\n') {
-                    eol_characters = 2;
-                }
-            } else if (data[pos] == '\n') {
-                eol_characters = 1;
-            }
-        }
-        self.next += pos + eol_characters;
-        if (self.includeEol) {
-            return data[0 .. pos + eol_characters];
-        } else {
-            return data[0..pos];
-        }
-    }
-
-    pub fn readAllLines(self: *LineReaderMemoryMapped, allocator: std.mem.Allocator) ![][]const u8 {
-        var reserved: usize = 1024;
-        var lines: [][]const u8 = try allocator.alloc([]u8, reserved);
-        var i: usize = 0;
-        while ((try self.readLine())) |line| {
-            if (i == reserved) {
-                reserved *= 2;
-                lines = try allocator.realloc(lines, reserved);
-            }
-            lines[i] = line;
-            i += 1;
-        }
-        return lines[0..i];
     }
 };
 
@@ -376,21 +196,6 @@ test "MemMappedLineReader: read lines with includeEol has lf at end" {
     try testing.expectEqualStrings("The last line", (try lineReader.readLine()).?);
     try testing.expectEqual(null, try lineReader.readLine());
 }
-
-//test "MemMappedLineReader: read all lines" {
-//    try test_init();
-//    var file = try open_file("test/test_lf.txt");
-//    defer file.close();
-//
-//    var lineReader = try LineReader.initFile(&file, hpa, .{ .includeEol = true });
-//    defer lineReader.deinit();
-//
-//    const lines = try lineReader.readAllLines(hpa);
-//    try testing.expectEqualStrings("The 1st line\n", lines[0]);
-//    try testing.expectEqualStrings("The middle line\n", lines[1]);
-//    try testing.expectEqualStrings("The last line\n", lines[2]);
-//    try testing.expectEqual(3, lines.len);
-//}
 
 const hpa = std.heap.page_allocator;
 const testing = std.testing;
