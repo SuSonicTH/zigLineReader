@@ -113,3 +113,8 @@ inline fn fillBuffer(self: *Self) !usize {
     self.end += read;
     return read;
 }
+
+pub fn reset(self: *Self) !void {
+    _ = self;
+    return error.Unsupported;
+}
