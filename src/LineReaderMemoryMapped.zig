@@ -55,3 +55,7 @@ pub fn readLine(self: *Self) !?[]const u8 {
         return data[0..pos];
     }
 }
+
+pub fn reset(self: *Self) !void {
+    self.next = 0;
+}

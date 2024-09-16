@@ -33,6 +33,12 @@ pub const LineReader = union(enum) {
             inline else => |*lineReader| return try lineReader.readLine(),
         }
     }
+
+    pub fn reset(self: *LineReader) !void {
+        switch (self.*) {
+            inline else => |*lineReader| return try lineReader.reset(),
+        }
+    }
 };
 
 test "LineReaderAnyReader: init" {
