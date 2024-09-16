@@ -1,6 +1,7 @@
 const std = @import("std");
+const LineReaderAnyReader = @import("LineReaderAnyReader.zig");
+const LineReaderMemoryMapped = @import("LineReaderMemoryMapped.zig");
 const LineReader = @import("LineReader.zig").LineReader;
-const MemMappedLineReader = @import("LineReader.zig").MemMappedLineReader;
 
 fn readUntilDelimiterOrEof(allocator: std.mem.Allocator) !void {
     _ = allocator;
@@ -33,12 +34,12 @@ fn readUntilDelimiterOrEofBuffered(allocator: std.mem.Allocator) !void {
     }
 }
 
-fn lineReaderRead(allocator: std.mem.Allocator) !void {
+fn lineReaderAnyReaderRead(allocator: std.mem.Allocator) !void {
     const file = try std.fs.cwd().openFile("test/world192.txt", .{});
     defer file.close();
 
-    const reader = file.reader();
-    var lineReader = try LineReader.init(reader, allocator, .{});
+    const reader = file.reader().any();
+    var lineReader = try LineReaderAnyReader.init(reader, allocator, .{});
     defer lineReader.deinit();
 
     var lineCount: usize = 0;
@@ -47,12 +48,38 @@ fn lineReaderRead(allocator: std.mem.Allocator) !void {
     }
 }
 
-fn memMappedLineReaderRead(allocator: std.mem.Allocator) !void {
-    _ = allocator;
+fn lineReaderMemoryMappedRead(allocator: std.mem.Allocator) !void {
+    var file = try std.fs.cwd().openFile("test/world192.txt", .{});
+    defer file.close();
+
+    var lineReader = try LineReaderMemoryMapped.init(&file, allocator, .{});
+    defer lineReader.deinit();
+
+    var lineCount: usize = 0;
+    while ((try lineReader.readLine()) != null) {
+        lineCount += 1;
+    }
+}
+
+fn lineReaderAnyReaderInterface(allocator: std.mem.Allocator) !void {
     const file = try std.fs.cwd().openFile("test/world192.txt", .{});
     defer file.close();
 
-    var lineReader = try MemMappedLineReader.init(file, .{});
+    const reader = file.reader().any();
+    var lineReader = try LineReader.initReader(reader, allocator, .{});
+    defer lineReader.deinit();
+
+    var lineCount: usize = 0;
+    while ((try lineReader.readLine()) != null) {
+        lineCount += 1;
+    }
+}
+
+fn lineReaderMemoryMappedInterface(allocator: std.mem.Allocator) !void {
+    var file = try std.fs.cwd().openFile("test/world192.txt", .{});
+    defer file.close();
+
+    var lineReader = try LineReader.initFile(&file, allocator, .{});
     defer lineReader.deinit();
 
     var lineCount: usize = 0;
@@ -77,24 +104,32 @@ fn bench(function: Bench, name: []const u8, allocator: std.mem.Allocator) !void 
 
     var sum: f64 = 0;
     for (times, 1..) |time, i| {
-        std.debug.print("{d}: {d}\n", .{ i, @as(f64, @floatFromInt(time)) / 1000000.0 });
+        std.debug.print("{d}: {d}ms\n", .{ i, @as(f64, @floatFromInt(time)) / 1000000.0 });
         sum += @floatFromInt(time);
     }
-    std.debug.print("average: {d}\n\n", .{sum / 5 / 1000000.0});
+    std.debug.print("average: {d}ms\n\n", .{sum / 5 / 1000000.0});
 }
 
 test "readUntilDelimiterOrEof" {
-    //try bench(readUntilDelimiterOrEof, "readUntilDelimiterOrEof", hpa);
+    try bench(readUntilDelimiterOrEof, "readUntilDelimiterOrEof", hpa);
 }
 
 test "readUntilDelimiterOrEofBuffered" {
     try bench(readUntilDelimiterOrEofBuffered, "readUntilDelimiterOrEofBuffered", hpa);
 }
 
-test "lineReaderRead" {
-    try bench(lineReaderRead, "lineReaderRead", hpa);
+test "lineReaderAnyReaderRead" {
+    try bench(lineReaderAnyReaderRead, "lineReaderAnyReaderRead", hpa);
 }
 
-test "memMappedLineReaderRead" {
-    try bench(memMappedLineReaderRead, "memMappedLineReaderRead", hpa);
+test "lineReaderAnyReaderInterface" {
+    try bench(lineReaderAnyReaderInterface, "lineReaderAnyReaderInterface", hpa);
+}
+
+test "lineReaderMemoryMappedRead" {
+    try bench(lineReaderMemoryMappedRead, "lineReaderMemoryMappedRead", hpa);
+}
+
+test "lineReaderMemoryMappedInterface" {
+    try bench(lineReaderMemoryMappedInterface, "lineReaderMemoryMappedRead", hpa);
 }
