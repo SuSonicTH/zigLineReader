@@ -106,7 +106,7 @@ inline fn fillBuffer(self: *Self) !usize {
             self.buffer = try self.allocator.realloc(self.buffer, self.size);
         }
     }
-    const read = try self.reader.read(self.buffer[self.end .. self.end + self.read_size]);
+    const read = try self.reader.readAll(self.buffer[self.end .. self.end + self.read_size]);
     if (read < self.read_size) {
         self.eof = true;
     }
