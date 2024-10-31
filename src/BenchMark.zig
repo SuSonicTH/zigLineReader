@@ -131,5 +131,5 @@ test "lineReaderMemoryMappedRead" {
 }
 
 test "lineReaderMemoryMappedInterface" {
-    try bench(lineReaderMemoryMappedInterface, "lineReaderMemoryMappedRead", hpa);
+    try bench(lineReaderMemoryMappedInterface, "lineReaderMemoryMappedInterface", hpa);
 }
