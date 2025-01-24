@@ -7,10 +7,6 @@
             .url = "https://github.com/SuSonicTH/zigMemMapper/archive/9810b04516fd59bfdedd89ae2ad4374015fbd158.tar.gz",
             .hash = "1220dc6999d2edd1cd38a75bf6e4cfad758dd82d4c89f72e258fff4799309af30227",
         },
-        .MamMapper = .{
-            .url = "https://github.com/SuSonicTH/zigMemMapper/archive/9810b04516fd59bfdedd89ae2ad4374015fbd158.tar.gz",
-            .hash = "1220dc6999d2edd1cd38a75bf6e4cfad758dd82d4c89f72e258fff4799309af30227",
-        },
     },
 
     .paths = .{
